@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, Volume2, VolumeX, Disc3, Radio, Sparkles, AlertCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { Play, Pause, Volume2, VolumeX, Disc3, Radio, Sparkles } from 'lucide-react';
 
 export const RickMusicSection: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -8,12 +8,8 @@ export const RickMusicSection: React.FC = () => {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
-  const [audioError, setAudioError] = useState(false);
-  const [isSynthFallback, setIsSynthFallback] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const synthCtxRef = useRef<AudioContext | null>(null);
-  const synthTimerRef = useRef<number | null>(null);
 
   // Format seconds to mm:ss
   const formatTime = (timeInSeconds: number) => {
@@ -23,103 +19,47 @@ export const RickMusicSection: React.FC = () => {
     return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
   };
 
-  // Safe Web Audio procedural synth loop for demo if MP3 is missing
-  const stopSynth = useCallback(() => {
-    if (synthTimerRef.current) {
-      window.clearInterval(synthTimerRef.current);
-      synthTimerRef.current = null;
-    }
-    if (synthCtxRef.current && synthCtxRef.current.state !== 'closed') {
-      try {
-        synthCtxRef.current.close();
-      } catch {
-        // Context might already be closed
-      }
-      synthCtxRef.current = null;
-    }
-  }, []);
-
-  const startSynth = useCallback(() => {
-    stopSynth();
-    try {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new AudioCtx();
-      synthCtxRef.current = ctx;
-
-      // Rick & Morty inspired dark-synth arpeggio chords (C minor / Sci-Fi scale)
-      const notes = [130.81, 155.56, 174.61, 196.0, 233.08, 261.63, 311.13, 349.23]; // C3, Eb3, F3, G3, Bb3, C4, Eb4, F4
-      let step = 0;
-
-      // Set fallback duration
-      setDuration(120);
-
-      synthTimerRef.current = window.setInterval(() => {
-        if (!ctx || ctx.state === 'closed') return;
-        const now = ctx.currentTime;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-
-        // Alternating waveforms for retro sci-fi synth flavor
-        osc.type = step % 4 === 0 ? 'sawtooth' : 'sine';
-        const note = notes[step % notes.length];
-        osc.frequency.setValueAtTime(note, now);
-
-        const currentVol = isMuted ? 0 : volume * 0.15;
-        gain.gain.setValueAtTime(currentVol, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-
-        osc.start(now);
-        osc.stop(now + 0.38);
-
-        step = (step + 1) % 16;
-        setCurrentTime((prev) => (prev >= 120 ? 0 : prev + 0.25));
-      }, 250);
-    } catch {
-      console.warn('Web Audio synthesis unavailable');
-    }
-  }, [isMuted, volume, stopSynth]);
-
-  // Handle Play/Pause toggle
+  // Toggle Play / Pause
   const togglePlay = async () => {
-    if (!audioRef.current) return;
+    const audio = audioRef.current;
+    if (!audio) return;
 
     if (isPlaying) {
-      audioRef.current.pause();
-      if (isSynthFallback) stopSynth();
+      audio.pause();
       setIsPlaying(false);
     } else {
       try {
-        await audioRef.current.play();
+        await audio.play();
         setIsPlaying(true);
-        setIsSynthFallback(false);
-        setAudioError(false);
-      } catch (err: unknown) {
-        console.info('Local audio not found or blocked, activating interdimensional synth simulation:', err);
-        setAudioError(true);
-        setIsSynthFallback(true);
-        setIsPlaying(true);
-        startSynth();
+      } catch (err) {
+        // Silently handle any browser playback error in the background
+        console.warn('Playback error handled silently:', err);
+        setIsPlaying(false);
       }
     }
   };
 
-  // Audio element listeners
+  // Synchronize audio events
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const onTimeUpdate = () => {
-      if (!isSynthFallback) {
-        setCurrentTime(audio.currentTime);
-      }
+      setCurrentTime(audio.currentTime);
     };
 
     const onLoadedMetadata = () => {
-      setDuration(audio.duration);
-      setAudioError(false);
+      if (audio.duration && !isNaN(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
+
+    const onPlay = () => {
+      setIsPlaying(true);
+    };
+
+    const onPause = () => {
+      setIsPlaying(false);
     };
 
     const onEnded = () => {
@@ -127,45 +67,39 @@ export const RickMusicSection: React.FC = () => {
       setCurrentTime(0);
     };
 
-    const onError = () => {
-      setAudioError(true);
-    };
-
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('pause', onPause);
     audio.addEventListener('ended', onEnded);
-    audio.addEventListener('error', onError);
+
+    // If metadata was already cached or loaded
+    if (audio.readyState >= 1 && audio.duration && !isNaN(audio.duration)) {
+      setDuration(audio.duration);
+    }
 
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onPause);
       audio.removeEventListener('ended', onEnded);
-      audio.removeEventListener('error', onError);
+      audio.pause();
     };
-  }, [isSynthFallback]);
+  }, []);
 
-  // Volume synchronization
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = isMuted ? 0 : volume;
-    }
-  }, [volume, isMuted]);
-
-  // Cleanup on unmount
+  // Synchronize volume and mute state
   useEffect(() => {
     const audio = audioRef.current;
-    return () => {
-      if (audio) {
-        audio.pause();
-      }
-      stopSynth();
-    };
-  }, [stopSynth]);
+    if (audio) {
+      audio.volume = isMuted ? 0 : volume;
+    }
+  }, [volume, isMuted]);
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const seekTime = parseFloat(e.target.value);
     setCurrentTime(seekTime);
-    if (audioRef.current && !isSynthFallback) {
+    if (audioRef.current) {
       audioRef.current.currentTime = seekTime;
     }
   };
@@ -188,14 +122,12 @@ export const RickMusicSection: React.FC = () => {
       aria-label="Interdimensional Easter Egg"
       className="relative w-full py-16 sm:py-24 px-6 sm:px-10 lg:px-16 overflow-hidden border-y border-white/5 bg-[#060608]"
     >
-      {/* Hidden native audio element */}
+      {/* Native audio element pointing directly to /audio/damage-code.mp3 */}
       <audio
         ref={audioRef}
+        src="/audio/damage-code.mp3"
         preload="metadata"
-      >
-        <source src="/audio/for_the_damaged_coda.mp3" type="audio/mpeg" />
-        <source src="/audio/damage-code.mp3" type="audio/mpeg" />
-      </audio>
+      />
 
       {/* Subtle Interdimensional Grid Background Lines */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(204,255,0,0.06),transparent_50%)] pointer-events-none" />
@@ -292,7 +224,6 @@ export const RickMusicSection: React.FC = () => {
                   alt="Rick Sanchez - Dimension C-137"
                   className="w-full h-full object-contain filter drop-shadow-[0_12px_24px_rgba(0,0,0,0.8)]"
                   onError={(e) => {
-                    // Fallback to stylized SVG placeholder if rick.png cannot be resolved
                     const target = e.currentTarget;
                     target.style.display = 'none';
                     const parent = target.parentElement;
@@ -443,25 +374,6 @@ export const RickMusicSection: React.FC = () => {
                   </span>
                 </div>
               </div>
-
-              {/* Informational Asset Note when MP3 is pending */}
-              <AnimatePresence>
-                {audioError && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="pt-2"
-                  >
-                    <div className="p-3 rounded-xl bg-[#00E5FF]/10 border border-[#00E5FF]/25 font-mono text-[11px] text-[#00E5FF] flex items-start gap-2.5">
-                      <AlertCircle size={15} className="mt-0.5 shrink-0 text-[#00E5FF]" />
-                      <div className="leading-relaxed">
-                        <span className="font-bold">Interdimensional Synth Simulation Active:</span> Playing procedural synthesizer arpeggio. To use your original audio, simply place your audio file at <code className="px-1.5 py-0.5 rounded bg-black/50 text-[#CCFF00] font-semibold">public/audio/damage-code.mp3</code>.
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
           </div>
         </div>
