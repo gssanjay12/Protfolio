@@ -7,6 +7,7 @@ import { CreativeSkillsSection } from './components/sections/CreativeSkillsSecti
 import { CreativeExperienceSection } from './components/sections/CreativeExperienceSection';
 import { CreativeAchievementsSection } from './components/sections/CreativeAchievementsSection';
 import { CreativeContactSection } from './components/sections/CreativeContactSection';
+import { RickMusicSection } from './components/sections/RickMusicSection';
 import { CreativeFooter } from './components/layout/CreativeFooter';
 import { CustomCursor } from './components/cursor/CustomCursor';
 
@@ -80,6 +81,9 @@ export const App: React.FC = () => {
 
         {/* 05 // ACHIEVEMENTS & AWARDS */}
         <CreativeAchievementsSection />
+
+        {/* INTERDIMENSIONAL EASTER EGG // RICK & MORTY */}
+        <RickMusicSection />
 
         {/* 06 // CONTACT CLIMAX */}
         <CreativeContactSection />
