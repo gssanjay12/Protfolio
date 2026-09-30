@@ -191,9 +191,11 @@ export const RickMusicSection: React.FC = () => {
       {/* Hidden native audio element */}
       <audio
         ref={audioRef}
-        src="/audio/damage-code.mp3"
         preload="metadata"
-      />
+      >
+        <source src="/audio/for_the_damaged_coda.mp3" type="audio/mpeg" />
+        <source src="/audio/damage-code.mp3" type="audio/mpeg" />
+      </audio>
 
       {/* Subtle Interdimensional Grid Background Lines */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(204,255,0,0.06),transparent_50%)] pointer-events-none" />
